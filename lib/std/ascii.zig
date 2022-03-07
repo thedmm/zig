@@ -46,7 +46,7 @@ const std = @import("std");
 /// ASCII characters are encoded as 7-bit non-negative integers.  However, it is
 /// far more performant to store them here as 8-bit integers instead, because an
 /// 8-bit integer fits exactly within 1 byte.
-pub const Char = struct {
+pub const Char = extern struct {
     /// The raw numeric value of the ASCII-encoded character.
     /// 
     /// Note that the topmost bit must be set to zero.
@@ -148,6 +148,14 @@ pub const Char = struct {
             return self;
     }
 
+    /// Modify the given character to lowercase it.
+    /// 
+    /// This only has an effect on uppercase characters; all other characters
+    /// are left unmodified.
+    pub fn to_lower(self: *Char) void {
+        if (self.is_upper()) self.raw |= 0b0010_0000;
+    }
+
     /// Return an uppercase variant of the given character.
     /// 
     /// This only has an effect on lowercase characters; all other characters
@@ -157,6 +165,14 @@ pub const Char = struct {
             return Char { .raw = self.raw & 0b1101_1111 };
         else
             return self;
+    }
+
+    /// Modify the given character to uppercase it.
+    /// 
+    /// This only has an effect on lowercase characters; all other characters
+    /// are left unmodified.
+    pub fn to_upper(self: *Char) void {
+        if (self.is_lower()) self.raw &= 0b1101_1111;
     }
 
     /// The `NUL` (null character) control code.
@@ -267,14 +283,93 @@ pub const Char = struct {
     pub const DEL = Char { .raw = 0x7F };
 };
 
-// TODO: Provide optimized functions which operate on sequences of characters.
-// Ensure that the functions are vectorized appropriately, and optimize them.
-// It may be beneficial to provide architecture-level specializations.
+// TODO: Allow individual architectures to override the following functions with
+// faster variants where necessary.
 // 
-// Note that it is possible to provide functions which operate on NUL-terminated
-// ASCII texts, as these usually look different when vectorized, and can be much
-// faster.  Also, feel free to rewrite memory outside the bounds of the arrays,
-// as long as the rewrites occur within aligned boundaries, and unless volatile
-// memory is involved (this should also likely not affect things like atomics,
-// particularly on architectures like x86 where the hardware memory model takes
-// care of this stuff).
+// Note that on platforms like x86, it should be possible to safely overwrite
+// out-of-bounds memory, with some restrictions (e.g. only within the same block
+// of 64 bytes as memory that does have to be modified).  This sort of thing is
+// best managed by a hand-written vectorized implementation.
+
+// Note that the string-operating functions below operate branchlessly: they act
+// on every byte of the input, in the hope that this promotes vectorization.
+
+// TODO: Provide informational error handling, by providing detailed information
+// about errors in some shared location, in addition to returning an `error`.
+// One option is to take the location to place the error as a parameter.
+
+/// Determine whether the given byte sequence is valid ASCII.
+/// 
+/// In order for the text to be valid ASCII, every single byte within it must be
+/// a valid ASCII character.  Thus, each byte's numeric value must be less than
+/// 128 (equivalently, the topmost bit in every byte must be unset).
+pub fn is_ascii(text: []const u8) bool {
+    // TODO: Use a fold iterator function.
+    var is = true;
+    for (text) |b| is = is and (b < 128);
+    return is;
+}
+
+/// Attempt to cast the given byte sequence to valid ASCII.
+/// 
+/// In order for the text to be valid ASCII, every single byte within it must be
+/// a valid ASCII character.  Thus, each byte's numeric value must be less than
+/// 128 (equivalently, the topmost bit in every byte must be unset).
+/// 
+/// If the input is ASCII, then it is returned, safely casted into a sequnece of
+/// ASCII character objects.  Otherwise, an error is returned.
+pub fn as_ascii(text: []const u8) ?[]const Char {
+    return if (is_ascii(text)) @ptrCast([]const Char, text) else null;
+}
+
+/// Attempt to cast the given byte sequence to valid ASCII (mutable variant).
+/// 
+/// In order for the text to be valid ASCII, every single byte within it must be
+/// a valid ASCII character.  Thus, each byte's numeric value must be less than
+/// 128 (equivalently, the topmost bit in every byte must be unset).
+/// 
+/// If the input is ASCII, then it is returned, safely casted into a sequnece of
+/// ASCII character objects.  Otherwise, an error is returned.
+pub fn as_ascii_mut(text: []u8) ?[]Char {
+    return if (is_ascii(text)) @ptrCast([]Char, text) else null;
+}
+
+/// Determines whether two ASCII strings are equal.
+/// 
+/// The two are equal if they have the same length and if every corresponding
+/// pair of characters between the two strings are equal.
+pub fn is_eq(a: []const Char, b: []const Char) bool {
+    // TODO: Rewrite to use functional programming.
+    if (a.len != b.len) return false;
+    var is = true;
+    for (a) |_, i| is = is and Char.is_eq(a[i], b[i]);
+    return is;
+}
+
+/// Determines whether two ASCII strings are case-insensitively equal.
+/// 
+/// The two are equal if they have the same length and if every corresponding
+/// pair of characters between the two strings are case-insensitively equal.
+pub fn is_eq_woc(a: []const Char, b: []const Char) bool {
+    // TODO: Rewrite to use functional programming.
+    if (a.len != b.len) return false;
+    var is = true;
+    for (a) |_, i| is = is and Char.is_eq_woc(a[i], b[i]);
+    return is;
+}
+
+/// Modifies the given string so that all characters are in lowercase.
+/// 
+/// This only has an effect on uppercase characters; all other characters are
+/// left unmodified.
+pub fn to_lower(text: []Char) void {
+    for (text) |*c| c.* = c.as_lower();
+}
+
+/// Modifies the given string so that all characters are in uppercase.
+/// 
+/// This only has an effect on lowercase characters; all other characters are
+/// left unmodified.
+pub fn to_upper(text: []Char) void {
+    for (text) |*c| c.* = c.as_upper();
+}
