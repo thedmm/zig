@@ -41,6 +41,7 @@ pub const Target = @import("target.zig").Target;
 pub const Thread = @import("Thread.zig");
 
 pub const array_hash_map = @import("array_hash_map.zig");
+pub const ascii = @import("ascii.zig");
 pub const atomic = @import("atomic.zig");
 pub const base64 = @import("base64.zig");
 pub const bit_set = @import("bit_set.zig");
@@ -78,7 +79,6 @@ pub const pdb = @import("pdb.zig");
 pub const process = @import("process.zig");
 pub const rand = @import("rand.zig");
 pub const sort = @import("sort.zig");
-pub const ascii = @import("ascii.zig");
 pub const testing = @import("testing.zig");
 pub const time = @import("time.zig");
 pub const unicode = @import("unicode.zig");

@@ -1,422 +1,280 @@
-// Does NOT look at the locale the way C89's toupper(3), isspace() et cetera does.
-// I could have taken only a u7 to make this clear, but it would be slower
-// It is my opinion that encodings other than UTF-8 should not be supported.
-//
-// (and 128 bytes is not much to pay).
-// Also does not handle Unicode character classes.
-//
-// https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/USASCII_code_chart.png/1200px-USASCII_code_chart.png
+//! The ASCII encoding.
+//! 
+//! ASCII (the American Standard Code for Information Exchange) is a simplified
+//! character encoding designed for electronic communication in English.  It has
+//! 128 characters, most corresponding to English letters and symbols, each of
+//! which has been assigned a unique numeric value between 0 (inclusive) and 128
+//! (exclusive).  Designed in the 1960s, it is still in unnecessarily-common use
+//! today.
+//! 
+//! English is the best-supported natural language in software.  This is largely
+//! a historical accident: the early years of software development occurred in
+//! various English-speaking countries, and as computers expanded in use across
+//! the world, the software on them, largely written in English, did not change
+//! significantly.  At the time, this could be somewhat justified, because while
+//! there were popular character encodings like ASCII for individual languages,
+//! there was no global consensus on a means to represent text which supported a
+//! large number of languages at once.  Since then, Unicode has been introduced,
+//! which should be preferred over ASCII whenever possible.
+//! 
+//! Unfortunately, ASCII remains a necessary evil, because it is necessary to be
+//! compatible with older software and standards which did not support Unicode.
+//! For example, the SMTP protocol, which is used for sending e-mail, would only
+//! safely transfer ASCII-encoded data.  Although support for non-ASCII-encoded
+//! data was later added to the protocol, this support remains optional, and so
+//! there are still SMTP servers which only support ASCII.  Such limitations led
+//! to the creation of various encoding schemes to translate non-ASCII data into
+//! ASCII (e.g. Base64), but this still means that code must be able to interact
+//! with ASCII text.
+//! 
+//! => https://wikipedia.org/wiki/ASCII
+//! => the manpage 'ascii(7)'
+//! 
+//! ---
+//! 
+//! This module provides the means by which to interact with ASCII.  It provides
+//! `Char`, which represents individual ASCII characters.  Because Zig does not
+//! provide an expressive enough type system to represent dynamically-sized data
+//! types, it is not easy to represent ASCII strings using custom types.  On the
+//! other hand, Zig has duck typing: so instead, global functions which take any
+//! array of ASCII characters is defined.
 
 const std = @import("std");
 
-/// Contains constants for the C0 control codes of the ASCII encoding.
-/// https://en.wikipedia.org/wiki/C0_and_C1_control_codes
-pub const control_code = struct {
-    pub const NUL = 0x00;
-    pub const SOH = 0x01;
-    pub const STX = 0x02;
-    pub const ETX = 0x03;
-    pub const EOT = 0x04;
-    pub const ENQ = 0x05;
-    pub const ACK = 0x06;
-    pub const BEL = 0x07;
-    pub const BS = 0x08;
-    pub const TAB = 0x09;
-    pub const LF = 0x0A;
-    pub const VT = 0x0B;
-    pub const FF = 0x0C;
-    pub const CR = 0x0D;
-    pub const SO = 0x0E;
-    pub const SI = 0x0F;
-    pub const DLE = 0x10;
-    pub const DC1 = 0x11;
-    pub const DC2 = 0x12;
-    pub const DC3 = 0x13;
-    pub const DC4 = 0x14;
-    pub const NAK = 0x15;
-    pub const SYN = 0x16;
-    pub const ETB = 0x17;
-    pub const CAN = 0x18;
-    pub const EM = 0x19;
-    pub const SUB = 0x1A;
-    pub const ESC = 0x1B;
-    pub const FS = 0x1C;
-    pub const GS = 0x1D;
-    pub const RS = 0x1E;
-    pub const US = 0x1F;
+/// An ASCII character.
+/// 
+/// ASCII characters are encoded as 7-bit non-negative integers.  However, it is
+/// far more performant to store them here as 8-bit integers instead, because an
+/// 8-bit integer fits exactly within 1 byte.
+pub const Char = struct {
+    /// The raw numeric value of the ASCII-encoded character.
+    /// 
+    /// Note that the topmost bit must be set to zero.
+    raw: u8,
 
-    pub const DEL = 0x7F;
+    /// Returns the 7-bit numeric value of the character.
+    pub fn get_raw(self: Char) u7 {
+        // Note: since out-of-bounds values aren't allowed, it's better to check
+        //       for them in safe code.  Otherwise @truncate could be used.
+        return @intCast(u7, self.raw);
+    }
 
-    pub const XON = 0x11;
-    pub const XOFF = 0x13;
+    /// Sets the character using the given 7-bit raw numeric value.
+    pub fn set_raw(self: *Char, val: u7) {
+        self.raw = @as(u8, val);
+    }
+
+    /// Whether the two given ASCII characters are (case-sensitively) equal.
+    pub fn is_eq(self: Char, other: Char) bool {
+        return self.raw == other.raw;
+    }
+
+    /// Whether the two given ASCII characters are case-insensitively equal.
+    pub fn is_eq_woc(self: Char, other: Char) bool {
+        return self.as_lower().raw == other.as_lower().raw;
+    }
+
+    /// Whether this is a control code.
+    pub fn is_ctrl(self: Char) bool {
+        return self.raw < 0x1F || self.raw == 0x7F;
+    }
+
+    /// Whether this is a symbolic character.
+    pub fn is_sym(self: Char) bool {
+        return (0x21 <= self.raw && self.raw <= 0x2F)
+            || (0x3A <= self.raw && self.raw <= 0x40)
+            || (0x5B <= self.raw && self.raw <= 0x60)
+            || (0x7B <= self.raw && self.raw <= 0x7E);
+    }
+
+    /// Whether this is a binary numeric character.
+    pub fn is_bin(self: Char) bool {
+        return 0x30 <= self.raw && self.raw <= 0x31;
+    }
+
+    /// Whether this is an octal numeric character.
+    pub fn is_oct(self: Char) bool {
+        return 0x30 <= self.raw && self.raw <= 0x37;
+    }
+
+    /// Whether this is an decimal numeric character.
+    pub fn is_num(self: Char) bool {
+        return 0x30 <= self.raw && self.raw <= 0x39;
+    }
+
+    /// Whether this is a hexadecimal numeric character.
+    pub fn is_hex(self: Char) bool {
+        return (0x30 <= self.raw && self.raw <= 0x39)
+            || (0x41 <= self.raw && self.raw <= 0x46)
+            || (0x61 <= self.raw && self.raw <= 0x66);
+    }
+
+    /// Whether this is an uppercase alphabetic character.
+    pub fn is_upper(self: Char) bool {
+        return 0x41 <= self.raw && self.raw <= 0x5A;
+    }
+
+    /// Whether this is a lowercase alphabetic character.
+    pub fn is_lower(self: Char) bool {
+        return 0x61 <= self.raw && self.raw <= 0x7A;
+    }
+
+    /// Whether this is an alphabetic character.
+    pub fn is_alpha(self: Char) bool {
+        return self.is_lower() || self.is_upper();
+    }
+
+    /// Whether this is an alphanumeric character.
+    pub fn is_alnum(self: Char) bool {
+        return self.is_alpha() || self.is_num();
+    }
+
+    /// Whether this is a whitespace character.
+    /// 
+    /// Specifically, this includes SPACE, tabs, new-line characters, and the
+    /// form-feed character.
+    pub fn is_space(self: Char) bool {
+        return (0x09 <= self.raw && self.raw <= 0x0D) || self.raw == 0x20;
+    }
+
+    /// Return a lowercase variant of the given character.
+    /// 
+    /// This only has an effect on uppercase characters; all other characters
+    /// are returned unchanged.
+    pub fn as_lower(self: Char) Char {
+        if (self.is_upper())
+            return Char { .raw = self.raw | 0b0010_0000 };
+        else
+            return self;
+    }
+
+    /// Return an uppercase variant of the given character.
+    /// 
+    /// This only has an effect on lowercase characters; all other characters
+    /// are returned unchanged.
+    pub fn as_upper(self: Char) Char {
+        if (self.is_lower())
+            return Char { .raw = self.raw & 0b1101_1111 };
+        else
+            return self;
+    }
+
+    /// The `NUL` (null character) control code.
+    /// 
+    /// In many cases, this is used to indicate the end of a sequence of ASCII
+    /// text.  Such sequences are called NUL-terminated strings.  They are often
+    /// used in the C programming language.
+    pub const NUL = Char { .raw = 0x00 };
+
+    /// The `SOH` (start of header) control code.
+    pub const SOH = Char { .raw = 0x01 };
+
+    /// The `STX` (start of text) control code.
+    pub const STX = Char { .raw = 0x02 };
+
+    /// The `ETX` (end of text) control code.
+    pub const ETX = Char { .raw = 0x03 };
+
+    /// The `EOT` (end of transmission) control code.
+    pub const EOT = Char { .raw = 0x04 };
+
+    /// The `ENQ` (enquiry) control code.
+    pub const ENQ = Char { .raw = 0x05 };
+
+    /// The `ACK` (acknowledge) control code.
+    pub const ACK = Char { .raw = 0x06 };
+
+    /// The `BEL` (bell) control code.
+    pub const BEL = Char { .raw = 0x07 };
+
+    /// The `BS` (backspace) control code.
+    pub const BS = Char { .raw = 0x08 };
+
+    /// The `HT` (horizontal tab) control code.
+    pub const HT = Char { .raw = 0x09 };
+
+    /// The `LF` (line feed) control code.
+    pub const LF = Char { .raw = 0x0A };
+
+    /// The `VT` (vertical tab) control code.
+    pub const VT = Char { .raw = 0x0B };
+
+    /// The `FF` (form feed) control code.
+    pub const FF = Char { .raw = 0x0C };
+
+    /// The `CR` (carriage return) control code.
+    pub const CR = Char { .raw = 0x0D };
+
+    /// The `SO` (shift out) control code.
+    pub const SO = Char { .raw = 0x0E };
+
+    /// The `SI` (shift in) control code.
+    pub const SI = Char { .raw = 0x0F };
+
+    /// The `DLE` (data link escape) control code.
+    pub const DLE = Char { .raw = 0x10 };
+
+    /// The `DC1` (device control 1) control code.
+    pub const DC1 = Char { .raw = 0x11 };
+
+    /// The `DC1` (device control 2) control code.
+    pub const DC2 = Char { .raw = 0x12 };
+
+    /// The `DC3` (device control 3) control code.
+    pub const DC3 = Char { .raw = 0x13 };
+
+    /// The `DC4` (device control 4) control code.
+    pub const DC4 = Char { .raw = 0x14 };
+
+    /// The `NAK` (negative acknowledge) control code.
+    pub const NAK = Char { .raw = 0x15 };
+
+    /// The `SYN` (synchronous idle) control code.
+    pub const SYN = Char { .raw = 0x16 };
+
+    /// The `ETB` (end of transmission block) control code.
+    pub const ETB = Char { .raw = 0x17 };
+
+    /// The `CAN` (cancel) control code.
+    pub const CAN = Char { .raw = 0x18 };
+
+    /// The `EM` (end of medium) control code.
+    pub const EM = Char { .raw = 0x19 };
+
+    /// The `SUB` (substitute) control code.
+    pub const SUB = Char { .raw = 0x1A };
+
+    /// The `ESC` (escape) control code.
+    pub const ESC = Char { .raw = 0x1B };
+
+    /// The `FS` (file separator) control code.
+    pub const FS = Char { .raw = 0x1C };
+
+    /// The `GS` (group separator) control code.
+    pub const GS = Char { .raw = 0x1D };
+
+    /// The `RS` (record separator) control code.
+    pub const RS = Char { .raw = 0x1E };
+
+    /// The `US` (unit separator) control code.
+    pub const US = Char { .raw = 0x1F };
+
+    /// The `DEL` (delete) extra control code.
+    /// 
+    /// This has not been assigned among the standard numeric values for control
+    /// codes, and so is occasionally treated specially.  This module will treat
+    /// it like all other control codes.
+    pub const DEL = Char { .raw = 0x7F };
 };
 
-const tIndex = enum(u3) {
-    Alpha,
-    Hex,
-    Space,
-    Digit,
-    Lower,
-    Upper,
-    // Ctrl, < 0x20 || == DEL
-    // Print, = Graph || == ' '. NOT '\t' et cetera
-    Punct,
-    Graph,
-    //ASCII, | ~0b01111111
-    //isBlank, == ' ' || == '\x09'
-};
-
-const combinedTable = init: {
-    comptime var table: [256]u8 = undefined;
-
-    const mem = std.mem;
-
-    const alpha = [_]u1{
-        //  0, 1, 2, 3, 4, 5, 6, 7 ,8, 9,10,11,12,13,14,15
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-
-        0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
-        0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
-    };
-    const lower = [_]u1{
-        //  0, 1, 2, 3, 4, 5, 6, 7 ,8, 9,10,11,12,13,14,15
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
-    };
-    const upper = [_]u1{
-        //  0, 1, 2, 3, 4, 5, 6, 7 ,8, 9,10,11,12,13,14,15
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-
-        0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    };
-    const digit = [_]u1{
-        //  0, 1, 2, 3, 4, 5, 6, 7 ,8, 9,10,11,12,13,14,15
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
-
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    };
-    const hex = [_]u1{
-        //  0, 1, 2, 3, 4, 5, 6, 7 ,8, 9,10,11,12,13,14,15
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
-
-        0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    };
-    const space = [_]u1{
-        //  0, 1, 2, 3, 4, 5, 6, 7 ,8, 9,10,11,12,13,14,15
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    };
-    const punct = [_]u1{
-        //  0, 1, 2, 3, 4, 5, 6, 7 ,8, 9,10,11,12,13,14,15
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
-
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0,
-    };
-    const graph = [_]u1{
-        //  0, 1, 2, 3, 4, 5, 6, 7 ,8, 9,10,11,12,13,14,15
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0,
-    };
-
-    comptime var i = 0;
-    inline while (i < 128) : (i += 1) {
-        table[i] =
-            @as(u8, alpha[i]) << @enumToInt(tIndex.Alpha) |
-            @as(u8, hex[i]) << @enumToInt(tIndex.Hex) |
-            @as(u8, space[i]) << @enumToInt(tIndex.Space) |
-            @as(u8, digit[i]) << @enumToInt(tIndex.Digit) |
-            @as(u8, lower[i]) << @enumToInt(tIndex.Lower) |
-            @as(u8, upper[i]) << @enumToInt(tIndex.Upper) |
-            @as(u8, punct[i]) << @enumToInt(tIndex.Punct) |
-            @as(u8, graph[i]) << @enumToInt(tIndex.Graph);
-    }
-    mem.set(u8, table[128..256], 0);
-    break :init table;
-};
-
-fn inTable(c: u8, t: tIndex) bool {
-    return (combinedTable[c] & (@as(u8, 1) << @enumToInt(t))) != 0;
-}
-
-pub fn isAlNum(c: u8) bool {
-    return (combinedTable[c] & ((@as(u8, 1) << @enumToInt(tIndex.Alpha)) |
-        @as(u8, 1) << @enumToInt(tIndex.Digit))) != 0;
-}
-
-pub fn isAlpha(c: u8) bool {
-    return inTable(c, tIndex.Alpha);
-}
-
-pub fn isCntrl(c: u8) bool {
-    return c < 0x20 or c == 127; //DEL
-}
-
-pub fn isDigit(c: u8) bool {
-    return inTable(c, tIndex.Digit);
-}
-
-pub fn isGraph(c: u8) bool {
-    return inTable(c, tIndex.Graph);
-}
-
-pub fn isLower(c: u8) bool {
-    return inTable(c, tIndex.Lower);
-}
-
-pub fn isPrint(c: u8) bool {
-    return inTable(c, tIndex.Graph) or c == ' ';
-}
-
-pub fn isPunct(c: u8) bool {
-    return inTable(c, tIndex.Punct);
-}
-
-pub fn isSpace(c: u8) bool {
-    return inTable(c, tIndex.Space);
-}
-
-/// All the values for which isSpace() returns true. This may be used with
-/// e.g. std.mem.trim() to trim whiteSpace.
-pub const spaces = [_]u8{ ' ', '\t', '\n', '\r', control_code.VT, control_code.FF };
-
-test "spaces" {
-    const testing = std.testing;
-    for (spaces) |space| try testing.expect(isSpace(space));
-
-    var i: u8 = 0;
-    while (isASCII(i)) : (i += 1) {
-        if (isSpace(i)) try testing.expect(std.mem.indexOfScalar(u8, &spaces, i) != null);
-    }
-}
-
-pub fn isUpper(c: u8) bool {
-    return inTable(c, tIndex.Upper);
-}
-
-pub fn isXDigit(c: u8) bool {
-    return inTable(c, tIndex.Hex);
-}
-
-pub fn isASCII(c: u8) bool {
-    return c < 128;
-}
-
-pub fn isBlank(c: u8) bool {
-    return (c == ' ') or (c == '\x09');
-}
-
-pub fn toUpper(c: u8) u8 {
-    if (isLower(c)) {
-        return c & 0b11011111;
-    } else {
-        return c;
-    }
-}
-
-pub fn toLower(c: u8) u8 {
-    if (isUpper(c)) {
-        return c | 0b00100000;
-    } else {
-        return c;
-    }
-}
-
-test "ascii character classes" {
-    const testing = std.testing;
-
-    try testing.expect('C' == toUpper('c'));
-    try testing.expect(':' == toUpper(':'));
-    try testing.expect('\xab' == toUpper('\xab'));
-    try testing.expect('c' == toLower('C'));
-    try testing.expect(isAlpha('c'));
-    try testing.expect(!isAlpha('5'));
-    try testing.expect(isSpace(' '));
-}
-
-/// Writes a lower case copy of `ascii_string` to `output`.
-/// Asserts `output.len >= ascii_string.len`.
-pub fn lowerString(output: []u8, ascii_string: []const u8) []u8 {
-    std.debug.assert(output.len >= ascii_string.len);
-    for (ascii_string) |c, i| {
-        output[i] = toLower(c);
-    }
-    return output[0..ascii_string.len];
-}
-
-test "lowerString" {
-    var buf: [1024]u8 = undefined;
-    const result = lowerString(&buf, "aBcDeFgHiJkLmNOPqrst0234+💩!");
-    try std.testing.expectEqualStrings("abcdefghijklmnopqrst0234+💩!", result);
-}
-
-/// Allocates a lower case copy of `ascii_string`.
-/// Caller owns returned string and must free with `allocator`.
-pub fn allocLowerString(allocator: std.mem.Allocator, ascii_string: []const u8) ![]u8 {
-    const result = try allocator.alloc(u8, ascii_string.len);
-    return lowerString(result, ascii_string);
-}
-
-test "allocLowerString" {
-    const result = try allocLowerString(std.testing.allocator, "aBcDeFgHiJkLmNOPqrst0234+💩!");
-    defer std.testing.allocator.free(result);
-    try std.testing.expectEqualStrings("abcdefghijklmnopqrst0234+💩!", result);
-}
-
-/// Writes an upper case copy of `ascii_string` to `output`.
-/// Asserts `output.len >= ascii_string.len`.
-pub fn upperString(output: []u8, ascii_string: []const u8) []u8 {
-    std.debug.assert(output.len >= ascii_string.len);
-    for (ascii_string) |c, i| {
-        output[i] = toUpper(c);
-    }
-    return output[0..ascii_string.len];
-}
-
-test "upperString" {
-    var buf: [1024]u8 = undefined;
-    const result = upperString(&buf, "aBcDeFgHiJkLmNOPqrst0234+💩!");
-    try std.testing.expectEqualStrings("ABCDEFGHIJKLMNOPQRST0234+💩!", result);
-}
-
-/// Allocates an upper case copy of `ascii_string`.
-/// Caller owns returned string and must free with `allocator`.
-pub fn allocUpperString(allocator: std.mem.Allocator, ascii_string: []const u8) ![]u8 {
-    const result = try allocator.alloc(u8, ascii_string.len);
-    return upperString(result, ascii_string);
-}
-
-test "allocUpperString" {
-    const result = try allocUpperString(std.testing.allocator, "aBcDeFgHiJkLmNOPqrst0234+💩!");
-    defer std.testing.allocator.free(result);
-    try std.testing.expectEqualStrings("ABCDEFGHIJKLMNOPQRST0234+💩!", result);
-}
-
-/// Compares strings `a` and `b` case insensitively and returns whether they are equal.
-pub fn eqlIgnoreCase(a: []const u8, b: []const u8) bool {
-    if (a.len != b.len) return false;
-    for (a) |a_c, i| {
-        if (toLower(a_c) != toLower(b[i])) return false;
-    }
-    return true;
-}
-
-test "eqlIgnoreCase" {
-    try std.testing.expect(eqlIgnoreCase("HEl💩Lo!", "hel💩lo!"));
-    try std.testing.expect(!eqlIgnoreCase("hElLo!", "hello! "));
-    try std.testing.expect(!eqlIgnoreCase("hElLo!", "helro!"));
-}
-
-pub fn startsWithIgnoreCase(haystack: []const u8, needle: []const u8) bool {
-    return if (needle.len > haystack.len) false else eqlIgnoreCase(haystack[0..needle.len], needle);
-}
-
-test "ascii.startsWithIgnoreCase" {
-    try std.testing.expect(startsWithIgnoreCase("boB", "Bo"));
-    try std.testing.expect(!startsWithIgnoreCase("Needle in hAyStAcK", "haystack"));
-}
-
-pub fn endsWithIgnoreCase(haystack: []const u8, needle: []const u8) bool {
-    return if (needle.len > haystack.len) false else eqlIgnoreCase(haystack[haystack.len - needle.len ..], needle);
-}
-
-test "ascii.endsWithIgnoreCase" {
-    try std.testing.expect(endsWithIgnoreCase("Needle in HaYsTaCk", "haystack"));
-    try std.testing.expect(!endsWithIgnoreCase("BoB", "Bo"));
-}
-
-/// Finds `substr` in `container`, ignoring case, starting at `start_index`.
-/// TODO boyer-moore algorithm
-pub fn indexOfIgnoreCasePos(container: []const u8, start_index: usize, substr: []const u8) ?usize {
-    if (substr.len > container.len) return null;
-
-    var i: usize = start_index;
-    const end = container.len - substr.len;
-    while (i <= end) : (i += 1) {
-        if (eqlIgnoreCase(container[i .. i + substr.len], substr)) return i;
-    }
-    return null;
-}
-
-/// Finds `substr` in `container`, ignoring case, starting at index 0.
-pub fn indexOfIgnoreCase(container: []const u8, substr: []const u8) ?usize {
-    return indexOfIgnoreCasePos(container, 0, substr);
-}
-
-test "indexOfIgnoreCase" {
-    try std.testing.expect(indexOfIgnoreCase("one Two Three Four", "foUr").? == 14);
-    try std.testing.expect(indexOfIgnoreCase("one two three FouR", "gOur") == null);
-    try std.testing.expect(indexOfIgnoreCase("foO", "Foo").? == 0);
-    try std.testing.expect(indexOfIgnoreCase("foo", "fool") == null);
-
-    try std.testing.expect(indexOfIgnoreCase("FOO foo", "fOo").? == 0);
-}
-
-/// Compares two slices of numbers lexicographically. O(n).
-pub fn orderIgnoreCase(lhs: []const u8, rhs: []const u8) std.math.Order {
-    const n = std.math.min(lhs.len, rhs.len);
-    var i: usize = 0;
-    while (i < n) : (i += 1) {
-        switch (std.math.order(toLower(lhs[i]), toLower(rhs[i]))) {
-            .eq => continue,
-            .lt => return .lt,
-            .gt => return .gt,
-        }
-    }
-    return std.math.order(lhs.len, rhs.len);
-}
-
-/// Returns true if lhs < rhs, false otherwise
-/// TODO rename "IgnoreCase" to "Insensitive" in this entire file.
-pub fn lessThanIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
-    return orderIgnoreCase(lhs, rhs) == .lt;
-}
+// TODO: Provide optimized functions which operate on sequences of characters.
+// Ensure that the functions are vectorized appropriately, and optimize them.
+// It may be beneficial to provide architecture-level specializations.
+// 
+// Note that it is possible to provide functions which operate on NUL-terminated
+// ASCII texts, as these usually look different when vectorized, and can be much
+// faster.  Also, feel free to rewrite memory outside the bounds of the arrays,
+// as long as the rewrites occur within aligned boundaries, and unless volatile
+// memory is involved (this should also likely not affect things like atomics,
+// particularly on architectures like x86 where the hardware memory model takes
+// care of this stuff).
