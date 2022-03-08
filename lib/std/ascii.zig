@@ -121,7 +121,7 @@ pub const Char = extern struct {
     }
 
     /// Whether this is an decimal numeric character.
-    pub fn is_num(self: Char) bool {
+    pub fn is_dec(self: Char) bool {
         return 0x30 <= self.raw and self.raw <= 0x39;
     }
 
@@ -149,7 +149,7 @@ pub const Char = extern struct {
 
     /// Whether this is an alphanumeric character.
     pub fn is_alnum(self: Char) bool {
-        return self.is_alpha() or self.is_num();
+        return self.is_alpha() or self.is_dec();
     }
 
     /// Whether this is a whitespace character.

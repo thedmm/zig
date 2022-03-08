@@ -5624,7 +5624,7 @@ fn parseCNumLit(c: *Context, m: *MacroCtx) ParseError!Node {
             } else if (mem.indexOfScalar(u8, lit_bytes, '.')) |dot_index| {
                 if (dot_index == 0) {
                     lit_bytes = try std.fmt.allocPrint(c.arena, "0{s}", .{lit_bytes});
-                } else if (dot_index + 1 == lit_bytes.len or !std.ascii.Char.as(lit_bytes[dot_index + 1]).is_num()) {
+                } else if (dot_index + 1 == lit_bytes.len or !std.ascii.Char.as(lit_bytes[dot_index + 1]).?.is_dec()) {
                     // If the literal lacks a digit after the `.`, we need to
                     // add one since `1.` or `1.e10` would be invalid syntax in Zig.
                     lit_bytes = try std.fmt.allocPrint(c.arena, "{s}0{s}", .{

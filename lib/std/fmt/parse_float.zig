@@ -213,7 +213,7 @@ fn parseRepr(s: []const u8, n: *FloatRepr) !ParseResult {
                 } else if (c == '-') {
                     n.negative = true;
                     i += 1;
-                } else if (ascii.Char.as(c).?.is_num() or c == '.') {
+                } else if (ascii.Char.as(c).?.is_dec() or c == '.') {
                     // continue
                 } else {
                     return error.InvalidCharacter;
@@ -242,7 +242,7 @@ fn parseRepr(s: []const u8, n: *FloatRepr) !ParseResult {
                 }
             },
             .MantissaIntegral => {
-                if (ascii.Char.as(c).?.is_num()) {
+                if (ascii.Char.as(c).?.is_dec()) {
                     if (digit_index < max_digits) {
                         n.mantissa *%= 10;
                         n.mantissa += c - '0';
@@ -262,7 +262,7 @@ fn parseRepr(s: []const u8, n: *FloatRepr) !ParseResult {
                 }
             },
             .MantissaFractional => {
-                if (ascii.Char.as(c).?.is_num()) {
+                if (ascii.Char.as(c).?.is_dec()) {
                     if (digit_index < max_digits) {
                         n.mantissa *%= 10;
                         n.mantissa += c - '0';
@@ -302,7 +302,7 @@ fn parseRepr(s: []const u8, n: *FloatRepr) !ParseResult {
                 }
             },
             .Exponent => {
-                if (ascii.Char.as(c).?.is_num()) {
+                if (ascii.Char.as(c).?.is_dec()) {
                     if (exponent < std.math.maxInt(i32) / 10) {
                         exponent *= 10;
                         exponent += @intCast(i32, c - '0');

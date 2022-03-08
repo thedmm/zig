@@ -1520,7 +1520,7 @@ fn buildOutputType(
                         end -= 3;
                     } else {
                         var found_digit = false;
-                        while (end > 0 and std.ascii.Char.as(name[end - 1]).?.is_num()) {
+                        while (end > 0 and std.ascii.Char.as(name[end - 1]).?.is_dec()) {
                             found_digit = true;
                             end -= 1;
                         }
