@@ -840,13 +840,16 @@ fn formatSliceEscapeImpl(comptime case: Case) type {
             buf[1] = 'x';
 
             for (bytes) |c| {
-                if (std.ascii.isPrint(c)) {
-                    try writer.writeByte(c);
-                } else {
-                    buf[2] = charset[c >> 4];
-                    buf[3] = charset[c & 15];
-                    try writer.writeAll(&buf);
+                if (std.ascii.Char.as_valid(c)) |a| {
+                    if (a.is_print()) {
+                        try writer.writeByte(c);
+                        continue;
+                    }
                 }
+
+                buf[2] = charset[c >> 4];
+                buf[3] = charset[c & 15];
+                try writer.writeAll(&buf);
             }
         }
     };

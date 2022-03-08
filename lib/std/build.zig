@@ -1272,8 +1272,8 @@ pub const Builder = struct {
         while (line_it.next()) |line| {
             if (mem.trim(u8, line, " \t").len == 0) continue;
             var tok_it = mem.tokenize(u8, line, " \t");
-            try list.append(PkgConfigPkg{
-                .name = tok_it.next() orelse return error.PkgConfigInvalidOutput,
+            try list.append(PkgConfigPkg {
+                .name = std.ascii.as(tok_it.next() orelse return error.PkgConfigInvalidOutput).?,
                 .desc = tok_it.rest(),
             });
         }
@@ -1902,27 +1902,31 @@ pub const LibExeObjStep = struct {
             }
 
             // Next we'll try ignoring case.
+            const al = std.ascii.as(lib_name).?;
             for (pkgs) |pkg| {
-                if (std.ascii.eqlIgnoreCase(pkg.name, lib_name)) {
+                const ap = std.ascii.as(pkg.name).?;
+                if (std.ascii.is_eq_woc(ap, al)) {
                     break :match pkg.name;
                 }
             }
 
             // Now try appending ".0".
             for (pkgs) |pkg| {
-                if (std.ascii.indexOfIgnoreCase(pkg.name, lib_name)) |pos| {
-                    if (pos != 0) continue;
-                    if (mem.eql(u8, pkg.name[lib_name.len..], ".0")) {
-                        break :match pkg.name;
-                    }
+                if (pkg.name.len < lib_name.len) continue;
+                const ap = std.ascii.as(pkg.name[0 .. lib_name.len]).?;
+                if (!std.ascii.is_eq_woc(ap, al)) continue;
+                if (mem.eql(u8, pkg.name[lib_name.len..], ".0")) {
+                    break :match pkg.name;
                 }
             }
 
             // Trimming "-1.0".
             if (mem.endsWith(u8, lib_name, "-1.0")) {
                 const trimmed_lib_name = lib_name[0 .. lib_name.len - "-1.0".len];
+                const at = std.ascii.as(trimmed_lib_name).?;
                 for (pkgs) |pkg| {
-                    if (std.ascii.eqlIgnoreCase(pkg.name, trimmed_lib_name)) {
+                    const ap = std.ascii.as(pkg.name).?;
+                    if (std.ascii.is_eq_woc(ap, at)) {
                         break :match pkg.name;
                     }
                 }

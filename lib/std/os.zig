@@ -1737,10 +1737,12 @@ pub fn getenvW(key: [*:0]const u16) ?[:0]const u16 {
         ascii_check: {
             if (ascii_match != null) break :ascii_check;
             if (key_slice.len != this_key.len) break :ascii_check;
+            // TODO: Rewrite to use functional programming.
             for (key_slice) |a_c, key_index| {
+                const AC = std.ascii.Char;
                 const a = math.cast(u8, a_c) catch break :ascii_check;
                 const b = math.cast(u8, this_key[key_index]) catch break :ascii_check;
-                if (std.ascii.toLower(a) != std.ascii.toLower(b)) break :ascii_check;
+                if (!AC.as(a).?.is_eq_woc(AC.as(b).?)) break :ascii_check;
             }
             ascii_match = this_value;
         }

@@ -514,8 +514,8 @@ pub const Version = struct {
     pub fn parse(text: []const u8) !Version {
         var end: usize = 0;
         while (end < text.len) : (end += 1) {
-            const c = text[end];
-            if (!std.ascii.isDigit(c) and c != '.') break;
+            const c = std.ascii.Char.as_valid(text[end]) orelse break;
+            if (!c.is_digit() and c.raw != '.') break;
         }
         // found no digits or '.' before unexpected character
         if (end == 0) return error.InvalidVersion;

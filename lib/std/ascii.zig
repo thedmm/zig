@@ -33,11 +33,13 @@
 //! ---
 //! 
 //! This module provides the means by which to interact with ASCII.  It provides
-//! `Char`, which represents individual ASCII characters.  Because Zig does not
-//! provide an expressive enough type system to represent dynamically-sized data
-//! types, it is not easy to represent ASCII strings using custom types.  On the
-//! other hand, Zig has duck typing: so instead, global functions which take any
-//! array of ASCII characters is defined.
+//! the `Char` type for individual ASCII characters.  Any communication of ASCII
+//! data should occur using this type.
+//! 
+//! Because Zig does not provide an expressive enough type system to represent
+//! dynamically-sized data types, it is not easy to represent ASCII strings
+//! using custom types.  This means that functionality for ASCII strings cannot
+//! be defined as member functions; instead, they are module-level functions.
 
 const std = @import("std");
 
@@ -52,16 +54,26 @@ pub const Char = extern struct {
     /// Note that the topmost bit must be set to zero.
     raw: u8,
 
-    /// Returns the 7-bit numeric value of the character.
-    pub fn get_raw(self: Char) u7 {
+    /// Verify that the given byte is valid ASCII.
+    pub fn is(byte: u8) bool {
+        return byte < 128;
+    }
+
+    /// Attempt to interpet the given byte as valid ASCII.
+    pub fn as(byte: u8) ?Char {
+        return if (Char.is(byte)) Char { .raw = byte } else null;
+    }
+
+    /// Construct an ASCII character from its 7-bit raw numeric value.
+    pub fn from_raw(val: u7) Char {
+        return Char { .raw = @as(u8, val) };
+    }
+
+    /// Destructs an ASCII character into its 7-bit raw numeric value.
+    pub fn into_raw(self: Char) u7 {
         // Note: since out-of-bounds values aren't allowed, it's better to check
         //       for them in safe code.  Otherwise @truncate could be used.
         return @intCast(u7, self.raw);
-    }
-
-    /// Sets the character using the given 7-bit raw numeric value.
-    pub fn set_raw(self: *Char, val: u7) {
-        self.raw = @as(u8, val);
     }
 
     /// Whether the two given ASCII characters are (case-sensitively) equal.
@@ -74,59 +86,70 @@ pub const Char = extern struct {
         return self.as_lower().raw == other.as_lower().raw;
     }
 
+    /// Whether this ASCII character is less than the given one.
+    pub fn is_lt(self: Char, other: Char) bool {
+        return self.raw < other.raw;
+    }
+
+    /// Whether this ASCII character is case-insensitively less than the given
+    /// one.
+    pub fn is_lt_woc(self: Char, other: Char) bool {
+        return self.as_lower().raw < other.as_lower().raw;
+    }
+
     /// Whether this is a control code.
     pub fn is_ctrl(self: Char) bool {
-        return self.raw < 0x1F || self.raw == 0x7F;
+        return self.raw < 0x1F or self.raw == 0x7F;
     }
 
     /// Whether this is a symbolic character.
     pub fn is_sym(self: Char) bool {
-        return (0x21 <= self.raw && self.raw <= 0x2F)
-            || (0x3A <= self.raw && self.raw <= 0x40)
-            || (0x5B <= self.raw && self.raw <= 0x60)
-            || (0x7B <= self.raw && self.raw <= 0x7E);
+        return (0x21 <= self.raw and self.raw <= 0x2F)
+            or (0x3A <= self.raw and self.raw <= 0x40)
+            or (0x5B <= self.raw and self.raw <= 0x60)
+            or (0x7B <= self.raw and self.raw <= 0x7E);
     }
 
     /// Whether this is a binary numeric character.
     pub fn is_bin(self: Char) bool {
-        return 0x30 <= self.raw && self.raw <= 0x31;
+        return 0x30 <= self.raw and self.raw <= 0x31;
     }
 
     /// Whether this is an octal numeric character.
     pub fn is_oct(self: Char) bool {
-        return 0x30 <= self.raw && self.raw <= 0x37;
+        return 0x30 <= self.raw and self.raw <= 0x37;
     }
 
     /// Whether this is an decimal numeric character.
     pub fn is_num(self: Char) bool {
-        return 0x30 <= self.raw && self.raw <= 0x39;
+        return 0x30 <= self.raw and self.raw <= 0x39;
     }
 
     /// Whether this is a hexadecimal numeric character.
     pub fn is_hex(self: Char) bool {
-        return (0x30 <= self.raw && self.raw <= 0x39)
-            || (0x41 <= self.raw && self.raw <= 0x46)
-            || (0x61 <= self.raw && self.raw <= 0x66);
+        return (0x30 <= self.raw and self.raw <= 0x39)
+            or (0x41 <= self.raw and self.raw <= 0x46)
+            or (0x61 <= self.raw and self.raw <= 0x66);
     }
 
     /// Whether this is an uppercase alphabetic character.
     pub fn is_upper(self: Char) bool {
-        return 0x41 <= self.raw && self.raw <= 0x5A;
+        return 0x41 <= self.raw and self.raw <= 0x5A;
     }
 
     /// Whether this is a lowercase alphabetic character.
     pub fn is_lower(self: Char) bool {
-        return 0x61 <= self.raw && self.raw <= 0x7A;
+        return 0x61 <= self.raw and self.raw <= 0x7A;
     }
 
     /// Whether this is an alphabetic character.
     pub fn is_alpha(self: Char) bool {
-        return self.is_lower() || self.is_upper();
+        return self.is_lower() or self.is_upper();
     }
 
     /// Whether this is an alphanumeric character.
     pub fn is_alnum(self: Char) bool {
-        return self.is_alpha() || self.is_num();
+        return self.is_alpha() or self.is_num();
     }
 
     /// Whether this is a whitespace character.
@@ -134,7 +157,7 @@ pub const Char = extern struct {
     /// Specifically, this includes SPACE, tabs, new-line characters, and the
     /// form-feed character.
     pub fn is_space(self: Char) bool {
-        return (0x09 <= self.raw && self.raw <= 0x0D) || self.raw == 0x20;
+        return (0x09 <= self.raw and self.raw <= 0x0D) or self.raw == 0x20;
     }
 
     /// Return a lowercase variant of the given character.
@@ -142,10 +165,11 @@ pub const Char = extern struct {
     /// This only has an effect on uppercase characters; all other characters
     /// are returned unchanged.
     pub fn as_lower(self: Char) Char {
-        if (self.is_upper())
+        if (self.is_upper()) {
             return Char { .raw = self.raw | 0b0010_0000 };
-        else
+        } else {
             return self;
+        }
     }
 
     /// Modify the given character to lowercase it.
@@ -161,10 +185,11 @@ pub const Char = extern struct {
     /// This only has an effect on lowercase characters; all other characters
     /// are returned unchanged.
     pub fn as_upper(self: Char) Char {
-        if (self.is_lower())
+        if (self.is_lower()) {
             return Char { .raw = self.raw & 0b1101_1111 };
-        else
+        } else {
             return self;
+        }
     }
 
     /// Modify the given character to uppercase it.
@@ -173,6 +198,13 @@ pub const Char = extern struct {
     /// are left unmodified.
     pub fn to_upper(self: *Char) void {
         if (self.is_lower()) self.raw &= 0b1101_1111;
+    }
+
+    /// Whether this is a printable character.
+    /// 
+    /// This includes all visible (graphical) characters and `SPACE`.
+    pub fn is_print(self: Char) bool {
+        return 0x20 <= self.raw and self.raw <= 0x7E;
     }
 
     /// The `NUL` (null character) control code.
@@ -303,11 +335,10 @@ pub const Char = extern struct {
 /// In order for the text to be valid ASCII, every single byte within it must be
 /// a valid ASCII character.  Thus, each byte's numeric value must be less than
 /// 128 (equivalently, the topmost bit in every byte must be unset).
-pub fn is_ascii(text: []const u8) bool {
-    // TODO: Use a fold iterator function.
-    var is = true;
-    for (text) |b| is = is and (b < 128);
-    return is;
+pub fn is(text: []const u8) bool {
+    var res = true;
+    for (text) |b| res = res and (b < 128);
+    return res;
 }
 
 /// Attempt to cast the given byte sequence to valid ASCII.
@@ -318,8 +349,8 @@ pub fn is_ascii(text: []const u8) bool {
 /// 
 /// If the input is ASCII, then it is returned, safely casted into a sequnece of
 /// ASCII character objects.  Otherwise, an error is returned.
-pub fn as_ascii(text: []const u8) ?[]const Char {
-    return if (is_ascii(text)) @ptrCast([]const Char, text) else null;
+pub fn as(text: []const u8) ?[]const Char {
+    return if (is(text)) @ptrCast([]const Char, text) else null;
 }
 
 /// Attempt to cast the given byte sequence to valid ASCII (mutable variant).
@@ -330,32 +361,69 @@ pub fn as_ascii(text: []const u8) ?[]const Char {
 /// 
 /// If the input is ASCII, then it is returned, safely casted into a sequnece of
 /// ASCII character objects.  Otherwise, an error is returned.
-pub fn as_ascii_mut(text: []u8) ?[]Char {
-    return if (is_ascii(text)) @ptrCast([]Char, text) else null;
+pub fn as_mut(text: []u8) ?[]Char {
+    return if (is(text)) @ptrCast([]Char, text) else null;
 }
 
-/// Determines whether two ASCII strings are equal.
+/// Whether the given two ASCII strings are equal.
 /// 
 /// The two are equal if they have the same length and if every corresponding
 /// pair of characters between the two strings are equal.
 pub fn is_eq(a: []const Char, b: []const Char) bool {
-    // TODO: Rewrite to use functional programming.
     if (a.len != b.len) return false;
-    var is = true;
-    for (a) |_, i| is = is and Char.is_eq(a[i], b[i]);
-    return is;
+    var res = true;
+    for (a) |_, i| res = res and Char.is_eq(a[i], b[i]);
+    return res;
 }
 
-/// Determines whether two ASCII strings are case-insensitively equal.
+/// Whether the given two ASCII strings are case-insensitively equal.
 /// 
 /// The two are equal if they have the same length and if every corresponding
 /// pair of characters between the two strings are case-insensitively equal.
 pub fn is_eq_woc(a: []const Char, b: []const Char) bool {
-    // TODO: Rewrite to use functional programming.
     if (a.len != b.len) return false;
-    var is = true;
-    for (a) |_, i| is = is and Char.is_eq_woc(a[i], b[i]);
-    return is;
+    var res = true;
+    for (a) |_, i| res = res and Char.is_eq_woc(a[i], b[i]);
+    return res;
+}
+
+/// Whether an ASCII string is less than another.
+/// 
+/// If the two strings share a common prefix (which can be nothing) followed by
+/// differing characters, and if the first string's character is less than the
+/// second string's character, then the first string is less than the second.
+/// 
+/// If the two strings do not have a differing character, but the first string
+/// is smaller (in length) than the second stirng, then it is less.
+/// 
+/// If the two strings are exactly equal, then the first is not less.
+pub fn is_lt(a: []const Char, b: []const Char) bool {
+    var i: usize = 0;
+    var res = false;
+    while (i < a.len and i < b.len) : (i += 1) {
+        res = res or a[i].is_lt(b[i]);
+    }
+    return res or (a.len < b.len);
+}
+
+/// Whether an ASCII string is case-insensitively less than another.
+/// 
+/// If the two strings case-insensitively share a common prefix (which can be
+/// nothing) followed by case-insensitively differing characters, and if the
+/// first string's character is case-insensitively less than the second string's
+/// character, then the first string is case-insensitively less than the second.
+/// 
+/// If the two strings do not have a differing character, but the first string
+/// is smaller (in length) than the second stirng, then it is less.
+/// 
+/// If the two strings are exactly equal, then the first is not less.
+pub fn is_lt_woc(a: []const Char, b: []const Char) bool {
+    var i: usize = 0;
+    var res = false;
+    while (i < a.len and i < b.len) : (i += 1) {
+        res = res or a[i].is_lt_woc(b[i]);
+    }
+    return res or (a.len < b.len);
 }
 
 /// Modifies the given string so that all characters are in lowercase.

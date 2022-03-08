@@ -422,7 +422,9 @@ fn networkShareServersEql(ns1: []const u8, ns2: []const u8) bool {
     var it2 = mem.tokenize(u8, ns2, &[_]u8{sep2});
 
     // TODO ASCII is wrong, we actually need full unicode support to compare paths.
-    return asciiEqlIgnoreCase(it1.next().?, it2.next().?);
+    const aa = std.ascii.as(it1.next().?).?;
+    const ab = std.ascii.as(it2.next().?).?;
+    return std.ascii.is_eq_woc(aa, ab);
 }
 
 fn compareDiskDesignators(kind: WindowsPath.Kind, p1: []const u8, p2: []const u8) bool {
@@ -433,7 +435,9 @@ fn compareDiskDesignators(kind: WindowsPath.Kind, p1: []const u8, p2: []const u8
             return true;
         },
         WindowsPath.Kind.Drive => {
-            return asciiUpper(p1[0]) == asciiUpper(p2[0]);
+            const aa = std.ascii.Char.as(p1[0]).?;
+            const ab = std.ascii.Char.as(p2[0]).?;
+            return aa.is_eq_woc(ab);
         },
         WindowsPath.Kind.NetworkShare => {
             const sep1 = p1[0];
@@ -443,27 +447,13 @@ fn compareDiskDesignators(kind: WindowsPath.Kind, p1: []const u8, p2: []const u8
             var it2 = mem.tokenize(u8, p2, &[_]u8{sep2});
 
             // TODO ASCII is wrong, we actually need full unicode support to compare paths.
-            return asciiEqlIgnoreCase(it1.next().?, it2.next().?) and asciiEqlIgnoreCase(it1.next().?, it2.next().?);
+            const aa = std.ascii.as(it1.next().?).?;
+            const ab = std.ascii.as(it2.next().?).?;
+            const ac = std.ascii.as(it1.next().?).?;
+            const ad = std.ascii.as(it2.next().?).?;
+            return std.ascii.is_eq_woc(aa, ab) and std.ascii.is_eq_woc(ac, ad);
         },
     }
-}
-
-fn asciiUpper(byte: u8) u8 {
-    return switch (byte) {
-        'a'...'z' => 'A' + (byte - 'a'),
-        else => byte,
-    };
-}
-
-fn asciiEqlIgnoreCase(s1: []const u8, s2: []const u8) bool {
-    if (s1.len != s2.len)
-        return false;
-    var i: usize = 0;
-    while (i < s1.len) : (i += 1) {
-        if (asciiUpper(s1[i]) != asciiUpper(s2[i]))
-            return false;
-    }
-    return true;
 }
 
 /// On Windows, this calls `resolveWindows` and on POSIX it calls `resolvePosix`.
@@ -505,7 +495,7 @@ pub fn resolveWindows(allocator: Allocator, paths: []const []const u8) ![]u8 {
         }
         switch (parsed.kind) {
             WindowsPath.Kind.Drive => {
-                result_drive_buf[0] = asciiUpper(parsed.disk_designator[0]);
+                result_drive_buf[0] = std.ascii.Char.as(parsed.disk_designator[0]).?.to_upper().raw;
                 result_disk_designator = result_drive_buf[0..];
                 have_drive_kind = WindowsPath.Kind.Drive;
             },
@@ -589,7 +579,7 @@ pub fn resolveWindows(allocator: Allocator, paths: []const []const u8) ![]u8 {
                 result_index += parsed_cwd.disk_designator.len;
                 result_disk_designator = result[0..parsed_cwd.disk_designator.len];
                 if (parsed_cwd.kind == WindowsPath.Kind.Drive) {
-                    result[0] = asciiUpper(result[0]);
+                    result[0] = std.ascii.Char.as(result[0]).?.to_upper().raw;
                 }
                 have_drive_kind = parsed_cwd.kind;
             },
@@ -607,7 +597,7 @@ pub fn resolveWindows(allocator: Allocator, paths: []const []const u8) ![]u8 {
         const parsed_cwd = windowsParsePath(result[0..result_index]);
         result_disk_designator = parsed_cwd.disk_designator;
         if (parsed_cwd.kind == WindowsPath.Kind.Drive) {
-            result[0] = asciiUpper(result[0]);
+            result[0] = std.ascii.Char.as(result[0]).?.to_upper().raw;
             // Remove the trailing slash if present, eg. if the cwd is a root
             // directory.
             if (cwd.len > 0 and cwd[cwd.len - 1] == sep_windows) {
@@ -739,7 +729,7 @@ test "resolve" {
     defer testing.allocator.free(cwd);
     if (native_os == .windows) {
         if (windowsParsePath(cwd).kind == WindowsPath.Kind.Drive) {
-            cwd[0] = asciiUpper(cwd[0]);
+            cwd[0] = std.ascii.Char.as(cwd[0]).?.to_upper().raw;
         }
         try testResolveWindows(&[_][]const u8{"."}, cwd);
     } else {
@@ -765,7 +755,7 @@ test "resolveWindows" {
             });
             defer testing.allocator.free(expected);
             if (parsed_cwd.kind == WindowsPath.Kind.Drive) {
-                expected[0] = asciiUpper(parsed_cwd.disk_designator[0]);
+                expected[0] = std.ascii.Char.as(parsed_cwd.disk_designator[0]).?.to_upper().raw;
             }
             try testResolveWindows(&[_][]const u8{ "/usr/local", "lib\\zig\\std\\array_list.zig" }, expected);
         }
@@ -776,7 +766,7 @@ test "resolveWindows" {
             });
             defer testing.allocator.free(expected);
             if (parsed_cwd.kind == WindowsPath.Kind.Drive) {
-                expected[0] = asciiUpper(parsed_cwd.disk_designator[0]);
+                expected[0] = std.ascii.Char.as(parsed_cwd.disk_designator[0]).?.to_upper().raw;
             }
             try testResolveWindows(&[_][]const u8{ "usr/local", "lib\\zig" }, expected);
         }
@@ -1106,7 +1096,9 @@ pub fn relativeWindows(allocator: Allocator, from: []const u8, to: []const u8) !
                 break :x !networkShareServersEql(parsed_to.disk_designator, parsed_from.disk_designator);
             },
             WindowsPath.Kind.Drive => {
-                break :x asciiUpper(parsed_from.disk_designator[0]) != asciiUpper(parsed_to.disk_designator[0]);
+                const aa = std.ascii.Char.as(parsed_from.disk_designator[0]).?;
+                const ab = std.ascii.Char.as(parsed_to.disk_designator[0]).?;
+                break :x !aa.is_eq_woc(ab);
             },
             else => unreachable,
         }
@@ -1124,8 +1116,9 @@ pub fn relativeWindows(allocator: Allocator, from: []const u8, to: []const u8) !
         const to_rest = to_it.rest();
         if (to_it.next()) |to_component| {
             // TODO ASCII is wrong, we actually need full unicode support to compare paths.
-            if (asciiEqlIgnoreCase(from_component, to_component))
-                continue;
+            const aa = std.ascii.as(from_component).?;
+            const ab = std.ascii.as(to_component).?;
+            if (aa.is_eq_woc(ab)) continue;
         }
         var up_count: usize = 1;
         while (from_it.next()) |_| {

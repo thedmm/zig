@@ -26,11 +26,12 @@ pub fn parseHexFloat(comptime T: type, s: []const u8) !T {
     if (s.len == 0)
         return error.InvalidCharacter;
 
-    if (ascii.eqlIgnoreCase(s, "nan")) {
+    const as = ascii.as(s).?;
+    if (ascii.is_eq_woc(as, ascii.as("nan").?)) {
         return math.nan(T);
-    } else if (ascii.eqlIgnoreCase(s, "inf") or ascii.eqlIgnoreCase(s, "+inf")) {
+    } else if (ascii.is_eq_woc(as, ascii.as("inf").?) or ascii.is_eq_woc(as, ascii.as("-inf").?)) {
         return math.inf(T);
-    } else if (ascii.eqlIgnoreCase(s, "-inf")) {
+    } else if (ascii.is_eq_woc(as, ascii.as("-inf").?)) {
         return -math.inf(T);
     }
 
@@ -90,7 +91,7 @@ pub fn parseHexFloat(comptime T: type, s: []const u8) !T {
                 }
             },
             .IntegerDigit => {
-                if (ascii.isXDigit(c)) {
+                if (ascii.Char.as(c).?.is_hex()) {
                     if (mantissa >= math.maxInt(u128) / 16)
                         return error.Overflow;
                     mantissa *%= 16;
@@ -114,7 +115,7 @@ pub fn parseHexFloat(comptime T: type, s: []const u8) !T {
                 } else state = .FractionDigit;
             },
             .FractionDigit => {
-                if (ascii.isXDigit(c)) {
+                if (ascii.Char.as(c).?.is_hex()) {
                     if (mantissa < math.maxInt(u128) / 16) {
                         mantissa *%= 16;
                         mantissa +%= try fmt.charToDigit(c, 16);
@@ -147,7 +148,7 @@ pub fn parseHexFloat(comptime T: type, s: []const u8) !T {
                 }
             },
             .ExpDigit => {
-                if (ascii.isXDigit(c)) {
+                if (ascii.Char.as(c).?.is_hex()) {
                     if (exponent >= math.maxInt(i16) / 10)
                         return error.Overflow;
                     exponent *%= 10;

@@ -213,7 +213,7 @@ fn parseRepr(s: []const u8, n: *FloatRepr) !ParseResult {
                 } else if (c == '-') {
                     n.negative = true;
                     i += 1;
-                } else if (ascii.isDigit(c) or c == '.') {
+                } else if (ascii.Char.as(c).?.is_num() or c == '.') {
                     // continue
                 } else {
                     return error.InvalidCharacter;
@@ -242,7 +242,7 @@ fn parseRepr(s: []const u8, n: *FloatRepr) !ParseResult {
                 }
             },
             .MantissaIntegral => {
-                if (ascii.isDigit(c)) {
+                if (ascii.Char.as(c).?.is_num()) {
                     if (digit_index < max_digits) {
                         n.mantissa *%= 10;
                         n.mantissa += c - '0';
@@ -262,7 +262,7 @@ fn parseRepr(s: []const u8, n: *FloatRepr) !ParseResult {
                 }
             },
             .MantissaFractional => {
-                if (ascii.isDigit(c)) {
+                if (ascii.Char.as(c).?.is_num()) {
                     if (digit_index < max_digits) {
                         n.mantissa *%= 10;
                         n.mantissa += c - '0';
@@ -302,7 +302,7 @@ fn parseRepr(s: []const u8, n: *FloatRepr) !ParseResult {
                 }
             },
             .Exponent => {
-                if (ascii.isDigit(c)) {
+                if (ascii.Char.as(c).?.is_num()) {
                     if (exponent < std.math.maxInt(i32) / 10) {
                         exponent *= 10;
                         exponent += @intCast(i32, c - '0');
@@ -336,7 +336,9 @@ fn caseInEql(a: []const u8, b: []const u8) bool {
     if (a.len != b.len) return false;
 
     for (a) |_, i| {
-        if (ascii.toUpper(a[i]) != ascii.toUpper(b[i])) {
+        const aa = ascii.Char.as(a[i]).?;
+        const ab = ascii.Char.as(b[i]).?;
+        if (!aa.is_eq_woc(ab)) {
             return false;
         }
     }
