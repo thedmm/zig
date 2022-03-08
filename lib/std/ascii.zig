@@ -40,6 +40,10 @@
 //! dynamically-sized data types, it is not easy to represent ASCII strings
 //! using custom types.  This means that functionality for ASCII strings cannot
 //! be defined as member functions; instead, they are module-level functions.
+//! 
+//! ---
+//! 
+//! Copyright 2022 The Depressed Milkman <moi@tdmm.eu>
 
 const std = @import("std");
 
