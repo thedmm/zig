@@ -5603,11 +5603,11 @@ fn parseCNumLit(c: *Context, m: *MacroCtx) ParseError!Node {
         .FloatLiteral => |suffix| {
             if (suffix != .none) lit_bytes = lit_bytes[0 .. lit_bytes.len - 1];
 
-            if (lit_bytes.len >= 2 and std.ascii.eqlIgnoreCase(lit_bytes[0..2], "0x")) {
+            if (lit_bytes.len >= 2 and std.ascii.is_eq_woc(std.ascii.as(lit_bytes[0..2]).?, std.ascii.as("0x").?)) {
                 if (mem.indexOfScalar(u8, lit_bytes, '.')) |dot_index| {
                     if (dot_index == 2) {
                         lit_bytes = try std.fmt.allocPrint(c.arena, "0x0{s}", .{lit_bytes[2..]});
-                    } else if (dot_index + 1 == lit_bytes.len or !std.ascii.isXDigit(lit_bytes[dot_index + 1])) {
+                    } else if (dot_index + 1 == lit_bytes.len or !std.ascii.Char.as(lit_bytes[dot_index + 1]).is_hex()) {
                         // If the literal lacks a digit after the `.`, we need to
                         // add one since `0x1.p10` would be invalid syntax in Zig.
                         lit_bytes = try std.fmt.allocPrint(c.arena, "0x{s}0{s}", .{
@@ -5624,7 +5624,7 @@ fn parseCNumLit(c: *Context, m: *MacroCtx) ParseError!Node {
             } else if (mem.indexOfScalar(u8, lit_bytes, '.')) |dot_index| {
                 if (dot_index == 0) {
                     lit_bytes = try std.fmt.allocPrint(c.arena, "0{s}", .{lit_bytes});
-                } else if (dot_index + 1 == lit_bytes.len or !std.ascii.isDigit(lit_bytes[dot_index + 1])) {
+                } else if (dot_index + 1 == lit_bytes.len or !std.ascii.Char.as(lit_bytes[dot_index + 1]).is_num()) {
                     // If the literal lacks a digit after the `.`, we need to
                     // add one since `1.` or `1.e10` would be invalid syntax in Zig.
                     lit_bytes = try std.fmt.allocPrint(c.arena, "{s}0{s}", .{
