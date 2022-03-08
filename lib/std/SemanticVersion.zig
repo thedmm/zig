@@ -133,7 +133,7 @@ pub fn parse(text: []const u8) !Version {
             if (id.len == 0) return error.InvalidVersion;
 
             // Identifiers MUST comprise only ASCII alphanumerics and hyphens [0-9A-Za-z-].
-            for (id) |c| if (!std.ascii.Char.as(c).?.is_dec() and c != '-') return error.InvalidVersion;
+            for (id) |c| if (!std.ascii.Char.as(c).?.is_alnum() and c != '-') return error.InvalidVersion;
         }
     }
 

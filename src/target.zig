@@ -377,7 +377,7 @@ fn eqlIgnoreCase(ignore_case: bool, a: []const u8, b: []const u8) bool {
     if (ignore_case) {
         const aa = std.ascii.as(a).?;
         const ab = std.ascii.as(b).?;
-        return sdt.ascii.is_eq_woc(aa, ab);
+        return std.ascii.is_eq_woc(aa, ab);
     } else {
         return std.mem.eql(u8, a, b);
     }

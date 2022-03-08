@@ -1596,7 +1596,8 @@ const Parser = struct {
                     var sentinel: Node.Index = 0;
                     if (p.eatToken(.identifier)) |ident| {
                         const ident_slice = p.source[p.token_starts[ident]..p.token_starts[ident + 1]];
-                        if (!std.mem.eql(u8, std.mem.trimRight(u8, ident_slice, &std.ascii.spaces), "c")) {
+                        const spaces = [_]u8 {' ', '\t', '\n', '\r', std.ascii.Char.VT.raw, std.ascii.Char.FF.raw };
+                        if (!std.mem.eql(u8, std.mem.trimRight(u8, ident_slice, &spaces), "c")) {
                             p.tok_i -= 1;
                         }
                     } else if (p.eatToken(.colon)) |_| {

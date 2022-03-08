@@ -2466,7 +2466,8 @@ fn renderExtraNewlineToken(ais: *Ais, tree: Ast, token_index: Ast.TokenIndex) Er
     // non-whitespace character is encountered or two newlines have been found.
     var i = token_start - 1;
     var newlines: u2 = 0;
-    while ((std.ascii.Char.as(tree.source[i]) catch false).is_space()) : (i -= 1) {
+    const AC = std.ascii.Char;
+    while (AC.is(tree.source[i]) and AC.as(tree.source[i]).?.is_space()) : (i -= 1) {
         if (tree.source[i] == '\n') newlines += 1;
         if (newlines == 2) return ais.insertNewline();
         if (i == prev_token_end) break;

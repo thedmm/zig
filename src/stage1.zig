@@ -421,7 +421,7 @@ export fn stage2_add_link_lib(
     const comp = @intToPtr(*Compilation, stage1.userdata);
     const lib_name = comp.gpa.alloc(u8, lib_name_len) catch return "out of memory";
     mem.copy(u8, lib_name, lib_name_ptr[0 .. lib_name_len]);
-    std.ascii.to_lower(@ptrCast([]std.ascii.Char, lib_name));
+    std.ascii.to_lower(@ptrCast([*]std.ascii.Char, lib_name)[0 .. lib_name_len]);
     const target = comp.getTarget();
     const is_libc = target_util.is_libc_lib_name(target, lib_name);
     if (is_libc) {

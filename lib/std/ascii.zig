@@ -354,7 +354,7 @@ pub fn is(text: []const u8) bool {
 /// If the input is ASCII, then it is returned, safely casted into a sequnece of
 /// ASCII character objects.  Otherwise, an error is returned.
 pub fn as(text: []const u8) ?[]const Char {
-    return if (is(text)) @ptrCast([]const Char, text) else null;
+    return if (is(text)) @ptrCast([*]const Char, text)[0 .. text.len] else null;
 }
 
 /// Attempt to cast the given byte sequence to valid ASCII (mutable variant).
@@ -366,7 +366,7 @@ pub fn as(text: []const u8) ?[]const Char {
 /// If the input is ASCII, then it is returned, safely casted into a sequnece of
 /// ASCII character objects.  Otherwise, an error is returned.
 pub fn as_mut(text: []u8) ?[]Char {
-    return if (is(text)) @ptrCast([]Char, text) else null;
+    return if (is(text)) @ptrCast([*]Char, text)[0 .. text.len] else null;
 }
 
 /// Whether the given two ASCII strings are equal.
